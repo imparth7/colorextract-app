@@ -1,74 +1,180 @@
-import { Image, StyleSheet, Platform } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, Button, StyleSheet, ActivityIndicator, ScrollView, Image } from 'react-native';
+import * as DocumentPicker from 'expo-document-picker';
+import { SafeAreaView } from 'react-native'
 
-import { HelloWave } from '@/components/HelloWave';
-import ParallaxScrollView from '@/components/ParallaxScrollView';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
+type FileInfo = {
+  uri: string;
+  name: string;
+  mimeType?: string;
+  size?: number;
+};
+
+type ColorInfo = {
+  Hex: string;
+  RGB: string;
+  HSL: string;
+};
 
 export default function HomeScreen() {
+  const [file, setFile] = useState<FileInfo | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [colors, setColors] = useState<ColorInfo[]>([]);
+
+  // Function to pick a file
+  const pickFile = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*', // Accept all file types
+      });
+
+      if (result.canceled) {
+        console.log('File picking cancelled');
+        return;
+      }
+
+      const selectedFile = result.assets[0];
+      setFile({
+        uri: selectedFile.uri,
+        name: selectedFile.name,
+        mimeType: selectedFile.mimeType,
+        size: selectedFile.size,
+      });
+
+      console.log('File selected:', selectedFile);
+
+      // Call API after file upload
+      callApi(selectedFile);
+    } catch (error) {
+      console.error('Error picking file:', error);
+    }
+  };
+
+  // Function to call API
+  const callApi = async (fileData: FileInfo) => {
+    try {
+      setLoading(true);
+      setColors([]);
+
+      // Create form data
+      const formData = new FormData();
+      formData.append('image', {
+        uri: fileData.uri,
+        name: fileData.name,
+        type: fileData.mimeType || 'application/octet-stream',
+      } as any);
+
+      // Call the API
+      const response = await fetch('http://127.0.0.1:5000/extract-colors', {  // Ensure your API endpoint is correct
+        method: 'POST',
+        body: formData,
+      });
+
+      // Check if the response status is OK (200)
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('API Error:', errorText);
+        throw new Error(`API request failed with status ${response.status}`);
+      }
+
+      // Parse JSON response
+      const result = await response.json();
+      console.log('API Response:', result);
+
+      if (result.colors) {
+        setColors(result.colors);
+      } else {
+        console.error('No colors found in response');
+      }
+    } catch (error) {
+      console.error('API Error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12'
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-        <ThemedText>
-          Tap the Explore tab to learn more about what's included in this starter app.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          When you're ready, run{' '}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+    <SafeAreaView style={styles.container}>
+      <View style={styles.container}>
+        <Text style={styles.title}>File Upload & Color Boxes</Text>
+
+        {/* File Picker Button */}
+        <Button title="Pick a File" onPress={pickFile} />
+
+        {/* Display Image Preview */}
+        {file && (
+          <>
+            <Image source={{ uri: file.uri }} style={styles.imagePreview} />
+          </>
+        )}
+
+        {/* Loading Indicator */}
+        {loading && <ActivityIndicator size="large" color="#007BFF" style={{ marginTop: 10 }} />}
+
+        {/* Display Colors */}
+        <ScrollView contentContainerStyle={styles.colorContainer}>
+          {colors.map((color, index) => (
+            <View key={index} style={[styles.colorBox, { backgroundColor: color.Hex }]}>
+              <Text style={styles.colorText}>{color.Hex}</Text>
+              <Text style={styles.colorText}>{color.RGB}</Text>
+              <Text style={styles.colorText}>{color.HSL}</Text>
+            </View>
+          ))}
+        </ScrollView>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
+  container: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: 8,
+    padding: 20,
+    backgroundColor: '#f9f9f9',
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 20,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  fileInfo: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#333',
+  },
+  imagePreview: {
+    width: 200,
+    height: 200,
+    marginTop: 20,
+    marginBottom: 20,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#ccc',
+  },
+  colorContainer: {
+    marginTop: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  colorBox: {
+    width: 200,
+    height: 100,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 15,
+    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  colorText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
 });
