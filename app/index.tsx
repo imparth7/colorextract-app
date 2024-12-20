@@ -6,6 +6,8 @@ import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import checkColor from '@/utils/checkColor';
 import * as Clipboard from 'expo-clipboard';
+import BarIndicator from '@/components/Indicator/BarIndicator';
+import { useColorScheme } from '@/hooks/useColorScheme.web';
 
 type FileInfo = {
   uri: string;
@@ -24,6 +26,9 @@ export default function HomeScreen() {
   const [file, setFile] = useState<FileInfo | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [colors, setColors] = useState<ColorInfo[]>([]);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const colorScheme = useColorScheme();
 
   // Function to pick a file
   const pickFile = async () => {
@@ -33,7 +38,7 @@ export default function HomeScreen() {
       });
 
       if (result.canceled) {
-        console.log('File picking cancelled');
+        // console.log('File picking cancelled');
         return;
       }
 
@@ -45,12 +50,13 @@ export default function HomeScreen() {
         size: selectedFile.size,
       });
 
-      console.log('File selected:', selectedFile);
+      // console.log('File selected:', selectedFile);
 
       // Call API after file upload
       callApi(selectedFile);
     } catch (error) {
-      console.error('Error picking file:', error);
+      // console.error('Error picking file:', error);
+      setErrorMsg('Cannot Picking file please try again.')
     }
   };
 
@@ -89,52 +95,73 @@ export default function HomeScreen() {
       // Check if the response status is OK (200)
       if (!response.ok) {
         const errorText = await response.text();
+        setErrorMsg("We have difficulty to read you image and get Colors from that, Choose other file or check your connection.");
         console.error('API Error:', errorText);
         throw new Error(`API request failed with status ${response.status}`);
       }
 
       // Parse JSON response
       const result = await response.json();
-      // console.log('API Response:', result);
+      console.log('API Response:', result);
 
       if (result.colors) {
         setColors(result.colors);
       } else {
         console.error('No colors found in response');
+        setErrorMsg('We cannot detect any color from your file.')
       }
     } catch (error) {
       console.error('API Error:', error);
+      setErrorMsg("Try after sometimes, We have server error.")
     } finally {
       setLoading(false);
     }
   };
 
+  const ImageSkeleton = ({ children }: any) => (
+    <TouchableOpacity style={[styles.imagePreview, { backgroundColor: '#80808080', position: 'relative', }]}
+      onPress={pickFile}
+    >
+      <View style={styles.skeletonView}>
+        {children}
+      </View>
+    </TouchableOpacity>
+  )
 
   return (
     <SafeAreaView style={[styles.safeview, { marginTop: Platform.OS === "android" ? StatusBar.currentHeight : 0 }]}>
       <ThemedView style={styles.container}>
         <ThemedText style={styles.title}>Color Extractor</ThemedText>
 
+        {/* Display Image Preview */}
+        <ImageSkeleton>
+          {file ? (
+            <Image source={{ uri: file.uri }} style={[styles.imagePreview, { margin: 0 }]} />
+          ) : (
+            <ThemedText>Click here to new pick file</ThemedText>
+          )}
+        </ImageSkeleton>
+
         {/* File Picker Button */}
-        <View style={{ display: 'flex', flexDirection: 'row', gap: 10 }}>
-          <Button title="Pick a File" onPress={pickFile} />
-          <Button title="Clear Selection" onPress={clearFile} disabled={!loading && colors && !file || loading} />
+        <View style={{ display: 'flex', flexDirection: 'row', gap: 15, marginBottom: 20 }}>
+          <TouchableOpacity
+            style={{ backgroundColor: '#F00', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10, opacity: (!loading && colors && !file || loading ? 0.5 : 1) }}
+            onPress={clearFile} disabled={!loading && colors && !file || loading} >
+            <ThemedText style={{ fontWeight: '900' }}>Clear</ThemedText>
+          </TouchableOpacity>
         </View>
 
-        {/* Display Image Preview */}
-        {file && (
-          <>
-            <Image source={{ uri: file.uri }} style={styles.imagePreview} />
-          </>
-        )}
 
         {/* Loading Indicator */}
-        {loading && <ActivityIndicator size="large" color="#007BFF" style={{ marginTop: 10 }} />}
+        {loading && <>
+          <BarIndicator size={40} count={10} color={colorScheme == "light" ? '#121212' : '#FEFEFE'} />
+          <ThemedText>Analyzing Image</ThemedText>
+        </>}
 
         {/* Display Colors */}
         <ScrollView overScrollMode='never' showsVerticalScrollIndicator={false} showsHorizontalScrollIndicator={false}>
           <View style={styles.colorContainer}>
-            {colors.map((color, index) => {
+            {colors?.map((color, index) => {
               let textColor = checkColor(color.HSL);
               return (
                 <TouchableOpacity key={index} activeOpacity={0.8} onPress={() => copyColor(color.Hex)}>
@@ -186,6 +213,17 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     borderRadius: 10,
   },
+  skeletonView: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 200,
+    height: 200,
+  },
   colorContainer: {
     display: 'flex',
     flexDirection: 'row',
@@ -196,8 +234,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   colorBox: {
-    width: 150,
-    height: 100,
+    width: 170,
+    height: 120,
     justifyContent: 'center',
     alignItems: 'center',
     borderRadius: 10,
